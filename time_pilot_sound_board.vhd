@@ -28,6 +28,7 @@ use ieee.numeric_std.all;
 
 entity time_pilot_sound_board is
 port(
+ clock_12     : in std_logic;
  clock_14     : in std_logic;
  reset        : in std_logic;
 
@@ -35,6 +36,10 @@ port(
  sound_trig   : in std_logic;
  
  audio_out    : out std_logic_vector(10 downto 0);
+ 
+ dn_addr        : in  std_logic_vector(15 downto 0);
+ dn_data        : in  std_logic_vector(7 downto 0);
+ dn_wr          : in  std_logic;
  
  dbg_cpu_addr : out std_logic_vector(15 downto 0)
  );
@@ -111,6 +116,8 @@ architecture struct of time_pilot_sound_board is
  signal Vcn_a : integer range -1024*1024 to 1024*1024-1;
  signal Vcn_b : integer range -1024*1024 to 1024*1024-1;
  signal Vcn_c : integer range  -256*1024 to  256*1024-1;
+
+ signal roms_cs : std_logic;
  
 begin
 
@@ -339,12 +346,20 @@ port map(
   DO      => cpu_do
 );
 
+roms_cs <= '1' when dn_addr(15 downto 12) = "1100" else '0';
+
 -- cpu1 program ROM
-rom_cpu1 : entity work.time_pilot_sound_prog
-port map(
- clk  => clock_14n,
- addr => cpu_addr(11 downto 0),
- data => cpu_rom_do
+rom_cpu1 : work.dpram generic map (12,8)
+port map
+(
+	clock_a   => clock_12,
+	wren_a    => dn_wr and roms_cs,
+	address_a => dn_addr(11 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clock_14n,
+	address_b => cpu_addr(11 downto 0),
+	q_b       => cpu_rom_do
 );
 
 -- working RAM

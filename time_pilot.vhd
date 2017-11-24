@@ -85,7 +85,10 @@ port(
 	clock_14     : in std_logic;
 	reset        : in std_logic;
 
-	-- tv15Khz_mode : in std_logic;
+	dn_addr      : in  std_logic_vector(15 downto 0);
+	dn_data      : in  std_logic_vector(7 downto 0);
+	dn_wr        : in  std_logic;
+
 	video_r        : out std_logic_vector(4 downto 0);
 	video_g        : out std_logic_vector(4 downto 0);
 	video_b        : out std_logic_vector(4 downto 0);
@@ -215,6 +218,8 @@ architecture struct of time_pilot is
  signal input_0       : std_logic_vector(7 downto 0);
  signal input_1       : std_logic_vector(7 downto 0);
  signal input_2       : std_logic_vector(7 downto 0);
+
+ signal romp_cs,romsp_cs,romch_cs : std_logic;
 
 begin
 
@@ -666,12 +671,22 @@ port map(
   DO      => cpu_do
 );
 
+romp_cs  <= '1' when dn_addr(15 downto 13) < "011" else '0';
+romch_cs <= '1' when dn_addr(15 downto 13) = "011" else '0';
+romsp_cs <= '1' when dn_addr(15 downto 14) = "10"  else '0';
+
 -- cpu1 program ROM
-rom_cpu1 : entity work.time_pilot_prog
-port map(
- clk  => clock_6n,
- addr => cpu_addr(14 downto 0),
- data => cpu_rom_do
+rom_cpu1 : work.dpram generic map (15,8)
+port map
+(
+	clock_a   => clock_12,
+	wren_a    => dn_wr and romp_cs,
+	address_a => dn_addr(14 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clock_6n,
+	address_b => cpu_addr(14 downto 0),
+	q_b       => cpu_rom_do
 );
 
 -- working/char RAM   0xA000-0xAFFF
@@ -730,14 +745,19 @@ port map(
 );
 
 -- char graphics ROM
-char_graphics : entity work.time_pilot_char_grphx
-port map(
- clk  => clock_6,
- addr => ch_graphx_addr,
- data => ch_graphx_do
+char_graphics : work.dpram generic map (13,8)
+port map
+(
+	clock_a   => clock_12,
+	wren_a    => dn_wr and romch_cs,
+	address_a => dn_addr(12 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clock_6,
+	address_b => ch_graphx_addr,
+	q_b       => ch_graphx_do
 );
 
--- char palette ROM
 ch_palette : entity work.time_pilot_char_color_lut
 port map(
  clk  => clock_6,
@@ -746,14 +766,19 @@ port map(
 );
 
 -- sprite graphics ROM
-sp_graphics : entity work.time_pilot_sprite_grphx
-port map(
- clk  => clock_6,
- addr => sp_graphx_addr,
- data => sp_graphx_do
+sp_graphics : work.dpram generic map (14,8)
+port map
+(
+	clock_a   => clock_12,
+	wren_a    => dn_wr and romsp_cs,
+	address_a => dn_addr(13 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clock_6,
+	address_b => sp_graphx_addr,
+	q_b       => sp_graphx_do
 );
 
--- sprite palette ROM
 sp_palette : entity work.time_pilot_sprite_color_lut
 port map(
  clk  => clock_6,
@@ -761,7 +786,6 @@ port map(
  data => sp_palette_do
 );
 
--- rgb palette ROM 1 
 rgb_palette_gb : entity work.time_pilot_palette_blue_green
 port map(
  clk  => clock_6,
@@ -769,7 +793,6 @@ port map(
  data => rgb_palette_bg_do
 );
 
--- rgb palette ROM 2
 rgb_palette_br : entity work.time_pilot_palette_green_red
 port map(
  clk  => clock_6,
@@ -780,6 +803,7 @@ port map(
 -- sound board
 time_pilot_sound_board : entity work.time_pilot_sound_board
 port map(
+ clock_12     => clock_12,
  clock_14     => clock_14,
  reset        => reset,
 
@@ -787,6 +811,10 @@ port map(
  sound_cmd    => sound_cmd,
  
  audio_out    => audio_out,
+ 
+ dn_addr      => dn_addr,
+ dn_data      => dn_data,
+ dn_wr        => dn_wr,
  
  dbg_cpu_addr => open
  );
