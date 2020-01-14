@@ -100,8 +100,8 @@ assign HDMI_ARY = status[1] ? 8'd9  : status[2] ? 8'd3 : 8'd4;
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.TMPLT;;",
-	"O1,Aspect Ratio,Original,Wide;",
-	"O2,Orientation,Vert,Horz;",
+	"H0O1,Aspect Ratio,Original,Wide;",
+	"H0O2,Orientation,Vert,Horz;",
 	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"O89,Lives,3,5,4,255(Cheat);",
@@ -247,31 +247,22 @@ wire ce_vid;
 wire hs, vs;
 wire [4:0] r,g,b;
 
-reg ce_pix;
-always @(posedge clk_48) begin
-        reg [2:0] div;
-
-        div <= div + 1'd1;
-        ce_pix <= !div;
-end
-
 wire no_rotate = status[2] | direct_video;
-
 
 arcade_video #(256,234,24) arcade_video
 (
-        .*,
+	.*,
+	.clk_video(clk_48),
+	.ce_pix(ce_vid),
 
-        .clk_video(clk_48),
-
-        .RGB_in({r,r[4:2],g,g[4:2],b,b[4:2]}),
-        .HBlank(hblank),
-        .VBlank(vblank),
-        .HSync(~hs),
-        .VSync(~vs),
+	.RGB_in({r,r[4:2],g,g[4:2],b,b[4:2]}),
+	.HBlank(hblank),
+	.VBlank(vblank),
+	.HSync(~hs),
+	.VSync(~vs),
 
 	.rotate_ccw(0),
-        .fx(status[5:3])
+	.fx(status[5:3])
 );
 
 wire [10:0] audio;
