@@ -258,20 +258,20 @@ end
 wire no_rotate = status[2] | direct_video;
 
 
-arcade_video #(256,234,12) arcade_video
+arcade_video #(256,234,24) arcade_video
 (
         .*,
 
         .clk_video(clk_48),
 
-        .RGB_in({r[3:0],g[3:0],b[3:0]}),
+        .RGB_in({r,r[4:2],g,g[4:2],b,b[4:2]}),
         .HBlank(hblank),
         .VBlank(vblank),
         .HSync(~hs),
         .VSync(~vs),
 
 	.rotate_ccw(0),
-        .fx(status[5:3]),
+        .fx(status[5:3])
 );
 
 wire [10:0] audio;
