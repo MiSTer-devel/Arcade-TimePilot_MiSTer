@@ -112,24 +112,24 @@ localparam CONF_STR = {
 	//"OH,Service,Off,On;",
 	"-;",
 	"R0,Reset;",
-	"J1,Fire,Start 1P,Start 2P;",
+	"J1,Fire,Start 1P,Start 2P,Coin;",
+	"jn,A,Start,Select,R;",
 	"V,v",`BUILD_DATE
 };
 
 wire [7:0] m_dip = { ~status[13],~status[16:14],~status[11],status[12],~status[9:8] };
 ////////////////////   CLOCKS   ///////////////////
 
-wire clk_sys, clk_snd;
+wire clk_sys, clk_snd, clk_48;
 wire pll_locked;
 
-wire clk_hdmi;
 pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(clk_sys),
-	.outclk_1(clk_snd),
-	.outclk_2(clk_hdmi),
+	.outclk_0(clk_48), // 48
+	.outclk_1(clk_sys), // 12
+	.outclk_2(clk_snd), // 14
 	.locked(pll_locked)
 );
 
@@ -138,6 +138,7 @@ pll pll
 wire [31:0] status;
 wire  [1:0] buttons;
 wire        forced_scandoubler;
+wire        direct_video;
 
 wire        ioctl_download;
 wire        ioctl_wr;
@@ -161,8 +162,10 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	.status_menumask(direct_video),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
+	.direct_video(direct_video),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
@@ -189,8 +192,8 @@ always @(posedge clk_sys) begin
 			'h029: btn_fire        <= pressed; // space
 			'h014: btn_fire        <= pressed; // ctrl
 
-			'h005: btn_one_player  <= pressed; // F1
-			'h006: btn_two_players <= pressed; // F2
+			'h005: btn_start_1     <= pressed; // F1
+			'h006: btn_start_2     <= pressed; // F2
 			// JPAC/IPAC/MAME Style Codes
 			'h016: btn_start_1     <= pressed; // 1
 			'h01E: btn_start_2     <= pressed; // 2
@@ -210,8 +213,6 @@ reg btn_down  = 0;
 reg btn_right = 0;
 reg btn_left  = 0;
 reg btn_fire  = 0;
-reg btn_one_player  = 0;
-reg btn_two_players = 0;
 
 reg btn_start_1=0;
 reg btn_start_2=0;
@@ -224,23 +225,22 @@ reg btn_right_2=0;
 reg btn_fire_2=0;
 
 
-wire m_up_2     = status[2] ? btn_left_2  | joy[1] : btn_up_2    | joy[3];
-wire m_down_2   = status[2] ? btn_right_2 | joy[0] : btn_down_2  | joy[2];
-wire m_left_2   = status[2] ? btn_down_2  | joy[2] : btn_left_2  | joy[1];
-wire m_right_2  = status[2] ? btn_up_2    | joy[3] : btn_right_2 | joy[0];
-wire m_fire_2  = btn_fire_2|joy[4];
+wire m_up_2     = btn_up_2    | joy[3];
+wire m_down_2   = btn_down_2  | joy[2];
+wire m_left_2   = btn_left_2  | joy[1];
+wire m_right_2  = btn_right_2 | joy[0];
+wire m_fire_2   = btn_fire_2  | joy[4];
 
 
+wire m_up     = btn_up    | joy[3];
+wire m_down   = btn_down  | joy[2];
+wire m_left   = btn_left  | joy[1];
+wire m_right  = btn_right | joy[0];
+wire m_fire   = btn_fire  | joy[4];
 
-wire m_up     = status[2] ? btn_left  | joy[1] : btn_up    | joy[3];
-wire m_down   = status[2] ? btn_right | joy[0] : btn_down  | joy[2];
-wire m_left   = status[2] ? btn_down  | joy[2] : btn_left  | joy[1];
-wire m_right  = status[2] ? btn_up    | joy[3] : btn_right | joy[0];
-wire m_fire   = btn_fire | joy[4];
-
-wire m_start1 = btn_one_player  | joy[5];
-wire m_start2 = btn_two_players | joy[6];
-wire m_coin   = m_start1 | m_start2;
+wire m_start1 = btn_start_1 | joy[5];
+wire m_start2 = btn_start_2 | joy[6];
+wire m_coin   = btn_coin_1  | joy[7];
 
 wire hblank, vblank;
 wire ce_vid;
@@ -248,27 +248,30 @@ wire hs, vs;
 wire [4:0] r,g,b;
 
 reg ce_pix;
-always @(posedge clk_hdmi) begin
-        reg old_clk;
+always @(posedge clk_48) begin
+        reg [2:0] div;
 
-        old_clk <= ce_vid;
-        ce_pix <= old_clk & ~ce_vid;
+        div <= div + 1'd1;
+        ce_pix <= !div;
 end
 
-arcade_rotate_fx #(256,234,15) arcade_video
+wire no_rotate = status[2] | direct_video;
+
+
+arcade_video #(256,234,12) arcade_video
 (
         .*,
 
-        .clk_video(clk_hdmi),
+        .clk_video(clk_48),
 
-        .RGB_in({r,g,b}),
+        .RGB_in({r[3:0],g[3:0],b[3:0]}),
         .HBlank(hblank),
         .VBlank(vblank),
         .HSync(~hs),
         .VSync(~vs),
 
+	.rotate_ccw(0),
         .fx(status[5:3]),
-        .no_rotate(status[2])
 );
 
 wire [10:0] audio;
@@ -303,9 +306,9 @@ time_pilot time_pilot
 	//.dip_switch_2('h4B), // Sound(8)/Difficulty(7-5)/Bonus(4)/Cocktail(3)/lives(2-1)
 	.dip_switch_2(m_dip), // Sound(8)/Difficulty(7-5)/Bonus(4)/Cocktail(3)/lives(2-1)
 
-	.start1(m_start1|btn_start_1),
-	.start2(m_start2|btn_start_2),
-	.coin1(m_coin|btn_coin_1|btn_coin_2),
+	.start1(m_start1),
+	.start2(m_start2),
+	.coin1(m_coin|btn_coin_2),
 	//.service(status[17]),
 	.service(1'b0),
  
