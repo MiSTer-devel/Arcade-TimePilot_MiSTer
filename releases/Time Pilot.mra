@@ -1,12 +1,19 @@
 <misterromdescription>
-  <rbf>TimePilot</rbf>
-  <rom index="0" zip="timeplt.zip" md5="62e6936e8fcfc4397d4e38a8136f5664">
-        <part name="tm1"/>
-        <part name="tm2"/>
-        <part name="tm3"/>
-        <part name="tm6"/>
-        <part name="tm4"/>
-        <part name="tm5"/>
-        <part name="tm7"/>
-  </rom>
+	<name>Time Pilot</name>
+	<mameversion>0220</mameversion>
+	<setname>timeplt</setname>
+	<mratimestamp>20200427161917</mratimestamp>
+	<year>1982</year>
+	<manufacturer>Konami</manufacturer>
+	<category>Army / Dog-Fight</category>
+	<rbf>timepilot</rbf>
+	<rom index="0" zip="timeplt.zip" md5="62e6936e8fcfc4397d4e38a8136f5664">
+		<part crc="1551f1b9" name="tm1"/>
+		<part crc="58636cb5" name="tm2"/>
+		<part crc="ff4e0d83" name="tm3"/>
+		<part crc="c2507f40" name="tm6"/>
+		<part crc="7e437c3e" name="tm4"/>
+		<part crc="e8ca87b9" name="tm5"/>
+		<part crc="d66da813" name="tm7"/>
+	</rom>
 </misterromdescription>
