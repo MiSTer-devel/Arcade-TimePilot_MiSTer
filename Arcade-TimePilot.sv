@@ -104,7 +104,7 @@ localparam CONF_STR = {
 	"H0O2,Orientation,Vert,Horz;",
 	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
-	"O89,Lives,3,5,4,255(Cheat);",
+	"O89,Lives,3,4,5,255(Cheat);",
 	"OB,Bonus Life,10k/50k,20k/60k;",
 	"OEG,Difficulty,1 (Easiest),2,3,4,5,6,7,8 (Difficult);",
 	"OC,Cabinet,Upright,Cocktail;",	
