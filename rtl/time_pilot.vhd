@@ -120,7 +120,15 @@ port(
 	down2          : in std_logic;
 	up2            : in std_logic;
 
-	dbg_cpu_addr : out std_logic_vector(15 downto 0)
+	dbg_cpu_addr : out std_logic_vector(15 downto 0);
+
+	pause          : in std_logic;
+
+	hs_address     : in  std_logic_vector(11 downto 0);
+	hs_data_out    : out std_logic_vector(7 downto 0);
+	hs_data_in     : in  std_logic_vector(7 downto 0);
+	hs_write       : in std_logic;
+	hs_access      : in std_logic
 );
 end time_pilot;
 
@@ -655,7 +663,7 @@ port map(
   RESET_n => reset_n,
   CLK_n   => clock_6,
   CLKEN   => cpu_ena,
-  WAIT_n  => '1',
+  WAIT_n  => not pause,
   INT_n   => '1', --cpu_irq_n,
   NMI_n   => cpu_nmi_n,
   BUSRQ_n => '1',
@@ -691,14 +699,21 @@ port map
 );
 
 -- working/char RAM   0xA000-0xAFFF
-wram : entity work.gen_ram
-generic map( dWidth => 8, aWidth => 12)
+wram : entity work.dpram
+generic map(12,8)
 port map(
- clk  => clock_6n,
- we   => wram_we,
- addr => wram_addr,
- d    => cpu_do,
- q    => wram_do
+ clock_a   => clock_6n,
+ wren_a    => wram_we,
+ address_a => wram_addr,
+ data_a    => cpu_do,
+ q_a       => wram_do,
+ 
+ clock_b   => clock_12,
+ wren_b    => hs_write,
+ address_b => hs_address,
+ data_b    => hs_data_in,
+ q_b       => hs_data_out
+ 
 );
 
 -- sprite RAM1    0xB000-0xB0FF

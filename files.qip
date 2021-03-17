@@ -13,4 +13,5 @@ set_global_assignment -name VHDL_FILE rtl/time_pilot_palette_blue_green.vhd
 set_global_assignment -name VHDL_FILE rtl/time_pilot_char_color_lut.vhd
 set_global_assignment -name VHDL_FILE rtl/time_pilot_sound_board.vhd
 set_global_assignment -name VHDL_FILE rtl/time_pilot.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE "rtl/hiscore.sv"
 set_global_assignment -name SYSTEMVERILOG_FILE "Arcade-TimePilot.sv"
