@@ -1,22 +1,32 @@
 //============================================================================
-//  Arcade: Time Pilot
+// 
+//  Port to MiSTer.
+//  Copyright (C) 2021 Sorgelig
 //
-//  Port to MiSTer
-//  Copyright (C) 2017 Sorgelig
+//  Time Pilot for MiSTer
+//  Original design Copyright (C) 2017 Dar
+//  Initial port to MiSTer Copyright (C) 2017 Sorgelig
+//  Updated port to MiSTer Copyright (C) 2021 Ace,
+//  Ash Evans (aka ElectronAsh/OzOnE), Artemio Urbina and Kitrinx (aka Rysha)
 //
-//  This program is free software; you can redistribute it and/or modify it
-//  under the terms of the GNU General Public License as published by the Free
-//  Software Foundation; either version 2 of the License, or (at your option)
-//  any later version.
+//  Permission is hereby granted, free of charge, to any person obtaining a
+//  copy of this software and associated documentation files (the "Software"),
+//  to deal in the Software without restriction, including without limitation
+//  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+//  and/or sell copies of the Software, and to permit persons to whom the 
+//  Software is furnished to do so, subject to the following conditions:
 //
-//  This program is distributed in the hope that it will be useful, but WITHOUT
-//  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-//  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-//  more details.
+//  The above copyright notice and this permission notice shall be included in
+//  all copies or substantial portions of the Software.
 //
-//  You should have received a copy of the GNU General Public License along
-//  with this program; if not, write to the Free Software Foundation, Inc.,
-//  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+//  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+//  DEALINGS IN THE SOFTWARE.
+//
 //============================================================================
 
 module emu
@@ -55,8 +65,9 @@ module emu
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
+	output        HDMI_FREEZE,
 
-`ifdef USE_FB
+`ifdef MISTER_FB
 	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
@@ -74,6 +85,7 @@ module emu
 	input         FB_LL,
 	output        FB_FORCE_BLANK,
 
+`ifdef MISTER_FB_PALETTE
 	// Palette control for 8bit modes.
 	// Ignored for other video modes.
 	output        FB_PAL_CLK,
@@ -81,6 +93,7 @@ module emu
 	output [23:0] FB_PAL_DOUT,
 	input  [23:0] FB_PAL_DIN,
 	output        FB_PAL_WR,
+`endif
 `endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
@@ -91,13 +104,27 @@ module emu
 	output  [1:0] LED_POWER,
 	output  [1:0] LED_DISK,
 
+	// I/O board button press simulation (active high)
+	// b[1]: user button
+	// b[0]: osd button
+	output  [1:0] BUTTONS,
+
 	input         CLK_AUDIO, // 24.576 MHz
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
 	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
 	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
 
-`ifdef USE_DDRAM
+	//ADC
+	inout   [3:0] ADC_BUS,
+
+	//SD-SPI
+	output        SD_SCK,
+	output        SD_MOSI,
+	input         SD_MISO,
+	output        SD_CS,
+	input         SD_CD,
+
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -110,7 +137,40 @@ module emu
 	output [63:0] DDRAM_DIN,
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
+
+	//SDRAM interface with lower latency
+	output        SDRAM_CLK,
+	output        SDRAM_CKE,
+	output [12:0] SDRAM_A,
+	output  [1:0] SDRAM_BA,
+	inout  [15:0] SDRAM_DQ,
+	output        SDRAM_DQML,
+	output        SDRAM_DQMH,
+	output        SDRAM_nCS,
+	output        SDRAM_nCAS,
+	output        SDRAM_nRAS,
+	output        SDRAM_nWE,
+
+`ifdef MISTER_DUAL_SDRAM
+	//Secondary SDRAM
+	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
+	input         SDRAM2_EN,
+	output        SDRAM2_CLK,
+	output [12:0] SDRAM2_A,
+	output  [1:0] SDRAM2_BA,
+	inout  [15:0] SDRAM2_DQ,
+	output        SDRAM2_nCS,
+	output        SDRAM2_nCAS,
+	output        SDRAM2_nRAS,
+	output        SDRAM2_nWE,
 `endif
+
+	input         UART_CTS,
+	output        UART_RTS,
+	input         UART_RXD,
+	output        UART_TXD,
+	output        UART_DTR,
+	input         UART_DSR,
 
 	// Open-drain User port.
 	// 0 - D+/RX
@@ -123,94 +183,95 @@ module emu
 	input         OSD_STATUS
 );
 
-assign VGA_F1    = 0;
-assign VGA_SCALER= 0;
-assign USER_OUT  = '1;
-assign LED_USER  = ioctl_download;
-assign LED_DISK  = 0;
-assign LED_POWER = 0;
+assign ADC_BUS  = 'Z;
+assign USER_OUT = '1;
+assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
+assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
+
+assign VGA_F1 = 0;
+assign VGA_SCALER = 0;
+assign FB_FORCE_BLANK = 0;
+assign HDMI_FREEZE = 0;
+
+wire signed [15:0] audio;
+assign AUDIO_L = audio;
+assign AUDIO_R = audio;
+assign AUDIO_S = 1;
 assign AUDIO_MIX = 0;
 
-assign {FB_PAL_CLK, FB_FORCE_BLANK, FB_PAL_ADDR, FB_PAL_DOUT, FB_PAL_WR} = '0;
-
-wire [1:0] ar = status[20:19];
-
-assign VIDEO_ARX = (!ar) ? ((status[2] ) ? 8'd4 : 8'd3) : (ar - 1'd1);
-assign VIDEO_ARY = (!ar) ? ((status[2] ) ? 8'd3 : 8'd4) : 12'd0;
-
-`include "build_id.v" 
-localparam CONF_STR = {
-	"A.TMPLT;;",
-	"H0OJK,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"H0O2,Orientation,Vert,Horz;",
-	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-	"-;",
-	"O89,Lives,3,4,5,255(Cheat);",
-	"OB,Bonus Life,10k/50k,20k/60k;",
-	"OEG,Difficulty,1 (Easiest),2,3,4,5,6,7,8 (Difficult);",
-	"OC,Cabinet,Upright,Cocktail;",	
-	"OD,Demo Sounds,Off,On;",
-	//"OH,Service,Off,On;",
-	"-;",
-	"R0,Reset;",
-	"J1,Fire,Start 1P,Start 2P,Coin,Pause;",
-	"jn,A,Start,Select,R,L;",
-	"V,v",`BUILD_DATE
-};
-
-wire [7:0] m_dip = { ~status[13],~status[16:14],~status[11],status[12],~status[9:8] };
-////////////////////   CLOCKS   ///////////////////
-
-wire clk_sys, clk_snd, clk_48;
-wire pll_locked;
-
-pll pll
-(
-	.refclk(CLK_50M),
-	.rst(0),
-	.outclk_0(clk_48), // 48
-	.outclk_1(clk_sys), // 12
-	.outclk_2(clk_snd), // 14
-	.locked(pll_locked)
-);
+assign LED_DISK  = 0;
+assign LED_POWER = 0;
+assign LED_USER  = ioctl_download;
+assign BUTTONS = 0;
 
 ///////////////////////////////////////////////////
 
-wire [31:0] status;
-wire  [1:0] buttons;
+wire [1:0] ar = status[14:13];
+
+assign VIDEO_ARX = status[12] ? ((!ar) ? 12'd16 : (ar - 1'd1)) : ((!ar) ? 12'd14 : (ar - 1'd1));
+assign VIDEO_ARY = status[12] ? ((!ar) ? 12'd14 : 12'd0) : ((!ar) ? 12'd16 : 12'd0);
+
+`include "build_id.v"
+localparam CONF_STR = {
+	"A.TIMEPLT;;",
+	"ODE,Aspect Ratio,Original,Full screen,[ARC1],[ARC2];",
+	"OC,Orientation,Vert,Horz;",
+	"OFH,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"-;",
+	"H1OR,Autosave Hiscores,Off,On;",
+	"P1,Pause options;",
+	"P1OP,Pause when OSD is open,On,Off;",
+	"P1OQ,Dim video after 10s,On,Off;",
+	"-;",
+	"DIP;",
+	"-;",
+	"O36,H Center,0,-1,-2,-3,-4,-5,-6,-7,+7,+6,+5,+4,+3,+2,+1;",
+	"O7A,V Center,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12;",
+	"-;",
+	"R0,Reset;",
+	"J1,Fire,Start P1,Coin,Start P2,Pause;",
+	"jn,B,Start,R,Select,L;",
+	"V,v",`BUILD_DATE
+};
+
 wire        forced_scandoubler;
-wire        direct_video;
+wire  [1:0] buttons;
+wire [31:0] status;
+wire [10:0] ps2_key;
 
 wire        ioctl_download;
 wire        ioctl_upload;
+wire        ioctl_upload_req;
+wire  [7:0] ioctl_index;
 wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
 wire  [7:0] ioctl_din;
-wire  [7:0] ioctl_index;
 
 wire [15:0] joystick_0, joystick_1;
 wire [15:0] joy = joystick_0 | joystick_1;
 
 wire [21:0] gamma_bus;
+wire        direct_video;
 
-
-hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
+hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
-	.clk_sys(clk_sys),
+	.clk_sys(CLK_49M),
 	.HPS_BUS(HPS_BUS),
-
-	.conf_str(CONF_STR),
-
-	.buttons(buttons),
-	.status(status),
-	.status_menumask(direct_video),
-	.forced_scandoubler(forced_scandoubler),
+	.EXT_BUS(),
 	.gamma_bus(gamma_bus),
 	.direct_video(direct_video),
 
-	.ioctl_upload(ioctl_upload),
+	.forced_scandoubler(forced_scandoubler),
+
+	.buttons(buttons),
+	.status(status),
+	.status_menumask({~hs_configured,direct_video}),
+
 	.ioctl_download(ioctl_download),
+	.ioctl_upload(ioctl_upload),
+	.ioctl_upload_req(ioctl_upload_req),
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
@@ -218,73 +279,123 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	.ioctl_index(ioctl_index),
 
 	.joystick_0(joystick_0),
-	.joystick_1(joystick_1)
+	.joystick_1(joystick_1),
+	.ps2_key(ps2_key)
 );
 
-wire m_up_2     = joy[3];
-wire m_down_2   = joy[2];
-wire m_left_2   = joy[1];
-wire m_right_2  = joy[0];
-wire m_fire_2   = joy[4];
+////////////////////   CLOCKS   ///////////////////
 
+wire CLK_49M;
+wire locked;
 
-wire m_up     = joy[3];
-wire m_down   = joy[2];
-wire m_left   = joy[1];
-wire m_right  = joy[0];
-wire m_fire   = joy[4];
+pll pll
+(
+	.refclk(CLK_50M),
+	.rst(0),
+	.outclk_0(CLK_49M),
+	.locked(locked)
+);
 
-wire m_start1 = joy[5];
-wire m_start2 = joy[6];
-wire m_coin   = joy[7];
-wire m_pause   = joy[8];
+wire reset = RESET | status[0] | buttons[1];
 
-// PAUSE SYSTEM
-reg				pause;									// Pause signal (active-high)
-reg				pause_toggle = 1'b0;					// User pause active (active-high)
-reg [31:0]		pause_timer;							// Time since pause
-reg [31:0]		pause_timer_dim = 31'h7270E00;	// Time until screen dim (10 seconds @ 12Mhz)
-reg 				dim_video = 1'b0;						// Dim video output (active-high)
+///////////////////         Keyboard           //////////////////
 
-assign pause = hs_access | pause_toggle;
-assign dim_video = (pause_timer >= pause_timer_dim) ? 1'b1 : 1'b0;
+reg btn_up       = 0;
+reg btn_down     = 0;
+reg btn_left     = 0;
+reg btn_right    = 0;
+reg btn_fire     = 0;
+reg btn_coin1    = 0;
+reg btn_coin2    = 0;
+reg btn_1p_start = 0;
+reg btn_2p_start = 0;
+reg btn_pause    = 0;
+reg btn_service  = 0;
 
-always @(posedge clk_sys) 
-begin
-	// User pause toggle
-	reg old_pause;
-	old_pause <= m_pause;
-	if(~old_pause & m_pause) pause_toggle <= ~pause_toggle;
-	if(pause_toggle)
-	begin
-		if(pause_timer<pause_timer_dim)
-		begin
-			pause_timer <= pause_timer + 1'b1;
-		end
-	end
-	else
-	begin
-		pause_timer <= 1'b0;
+wire pressed = ps2_key[9];
+wire [7:0] code = ps2_key[7:0];
+always @(posedge CLK_49M) begin
+	reg old_state;
+	old_state <= ps2_key[10];
+	if(old_state != ps2_key[10]) begin
+		case(code)
+			'h16: btn_1p_start <= pressed; // 1
+			'h1E: btn_2p_start <= pressed; // 2
+			'h2E: btn_coin1    <= pressed; // 5
+			'h36: btn_coin2    <= pressed; // 6
+			'h46: btn_service  <= pressed; // 9
+			'h4D: btn_pause    <= pressed; // P
+
+			'h75: btn_up      <= pressed; // up
+			'h72: btn_down    <= pressed; // down
+			'h6B: btn_left    <= pressed; // left
+			'h74: btn_right   <= pressed; // right
+			'h14: btn_fire    <= pressed; // ctrl
+		endcase
 	end
 end
 
-wire hblank, vblank;
-wire ce_vid;
-wire hs, vs;
-wire [4:0] r,g,b;
-wire [23:0] rgb_comp = { r,r[4:2],g,g[4:2],b,b[4:2] };
+//////////////////  Arcade Buttons/Interfaces   ///////////////////////////
+
+//Player 1
+wire m_up1      = btn_up      | joystick_0[3];
+wire m_down1    = btn_down    | joystick_0[2];
+wire m_left1    = btn_left    | joystick_0[1];
+wire m_right1   = btn_right   | joystick_0[0];
+wire m_fire1    = btn_fire    | joystick_0[4];
+
+//Player 2
+wire m_up2      = btn_up      | joystick_1[3];
+wire m_down2    = btn_down    | joystick_1[2];
+wire m_left2    = btn_left    | joystick_1[1];
+wire m_right2   = btn_right   | joystick_1[0];
+wire m_fire2    = btn_fire    | joystick_1[4];
+
+//Start/coin
+wire m_start1   = btn_1p_start | joy[5];
+wire m_start2   = btn_2p_start | joy[7];
+wire m_coin1    = btn_coin1    | joy[6];
+wire m_coin2    = btn_coin2;
+wire m_pause    = btn_pause    | joy[8];
+
+// PAUSE SYSTEM
+wire pause_cpu;
 wire [23:0] rgb_out;
-assign rgb_out = dim_video ? {rgb_comp[23:16] >> 1,rgb_comp[15:8] >> 1, rgb_comp[7:0] >> 1} : rgb_comp;
+pause #(8,8,8,49) pause
+(
+	.*,
+	.clk_sys(CLK_49M),
+	.user_button(m_pause),
+	.pause_request(hs_pause),
+	.options(~status[26:25])
+);
+
+// DIP SWITCHES
+reg [7:0] dip_sw[8];	// Active-LOW
+always @(posedge CLK_49M) begin
+	if(ioctl_wr && (ioctl_index==254) && !ioctl_addr[24:3])
+		dip_sw[ioctl_addr[2:0]] <= ioctl_dout;
+end
+
+///////////////                 Video                  ////////////////
+
+wire hblank, vblank;
+wire hs, vs;
+wire [4:0] r_out, g_out, b_out;
+wire [7:0] r = {r_out, r_out[4:2]};
+wire [7:0] g = {g_out, g_out[4:2]};
+wire [7:0] b = {b_out, b_out[4:2]};
+wire ce_pix;
 
 wire rotate_ccw = 0;
-wire no_rotate = status[2] | direct_video  ;
-screen_rotate screen_rotate (.*);
+wire no_rotate = status[12] | direct_video;
+screen_rotate screen_rotate(.*);
 
 arcade_video #(256,24) arcade_video
 (
 	.*,
-	.clk_video(clk_48),
-	.ce_pix(ce_vid),
+
+	.clk_video(CLK_49M),
 
 	.RGB_in(rgb_out),
 	.HBlank(hblank),
@@ -292,98 +403,86 @@ arcade_video #(256,24) arcade_video
 	.HSync(~hs),
 	.VSync(~vs),
 
-	.fx(status[5:3])
+	.fx(status[17:15])
 );
 
-wire [10:0] audio;
-assign AUDIO_L = {audio, 5'b00000};
-assign AUDIO_R = AUDIO_L;
-assign AUDIO_S = 0;
-
-wire rom_download = ioctl_download & !ioctl_index;
-wire reset = RESET | status[0] | buttons[1] | rom_download;
-
-time_pilot time_pilot
+//Instantiate Time Pilot top-level module
+TimePilot TP_inst
 (
-	.clock_12(clk_sys),
-	.clock_14(clk_snd),
-	.reset(reset),
+	.reset(~reset),                                        // input reset
 
-	.dn_addr(ioctl_addr[15:0]),
-	.dn_data(ioctl_dout),
-	.dn_wr(ioctl_wr & rom_download),
+	.clk_49m(CLK_49M),                                     // input clk_49m
+	
+	.coin({~m_coin2, ~m_coin1}),                           // input [1:0] coin
+	
+	.start_buttons({~m_start2, ~m_start1}),                // input [1:0] start_buttons
+	
+	.p1_joystick({~m_right1, ~m_left1, ~m_down1, ~m_up1}),
+	.p2_joystick({~m_right2, ~m_left2, ~m_down2, ~m_up2}),
+	.p1_fire(~m_fire1),
+	.p2_fire(~m_fire2),
+	
+	.btn_service(~btn_service),
 
-	.video_clk(ce_vid),
-
-	.video_r(r),
-	.video_g(g),
-	.video_b(b),
-	.video_hs(hs),
-	.video_vs(vs),
-
- 	.video_hblank(hblank),
-	.video_vblank(vblank),
- 
-	.audio_out(audio),
-
-	.dip_switch_1('hFF), // Coinage_B / Coinage_A
-	//.dip_switch_2('h4B), // Sound(8)/Difficulty(7-5)/Bonus(4)/Cocktail(3)/lives(2-1)
-	.dip_switch_2(m_dip), // Sound(8)/Difficulty(7-5)/Bonus(4)/Cocktail(3)/lives(2-1)
-
-	.start1(m_start1),
-	.start2(m_start2),
-	.coin1(m_coin),
-	//.service(status[17]),
-	.service(1'b0),
- 
-	.up1(m_up),
-	.down1(m_down),
-	.left1(m_left),
-	.right1(m_right),
-	.fire1(m_fire),
-
-	.fire2(m_fire_2),
-	.right2(m_right_2),
-	.left2(m_left_2),
-	.down2(m_down_2),
-	.up2(m_up_2),
+	.dip_sw({~dip_sw[1], ~dip_sw[0]}),                     // input [15:0] dip_sw
+	
+	.h_center(status[6:3]),                                // Screen centering
+	.v_center(status[10:7]),
+	
+	.video_hsync(hs),                                      // output video_hsync
+	.video_vsync(vs),                                      // output video_vsync
+	.video_vblank(vblank),                                 // output video_vblank
+	.video_hblank(hblank),                                 // output video_hblank
+	.ce_pix(ce_pix),                                       // output ce_pix
+	
+	.video_r(r_out),                                       // output [4:0] video_r
+	.video_g(g_out),                                       // output [4:0] video_g
+	.video_b(b_out),                                       // output [4:0] video_b
+	
+	.sound(audio),                                         // output [15:0] sound
+	
+	.ioctl_addr(ioctl_addr),
+	.ioctl_wr(ioctl_wr && !ioctl_index),
+	.ioctl_data(ioctl_dout),
+	
+	.pause(pause_cpu),
 
 	.hs_address(hs_address),
-	.hs_data_out(ioctl_din),
+	.hs_data_out(hs_data_out),
 	.hs_data_in(hs_data_in),
-	.hs_write(hs_write),
-	.hs_access(hs_access),
-
-	.pause(pause)
-	
+	.hs_write(hs_write_enable)
 );
 
 // HISCORE SYSTEM
 // --------------
-wire [11:0]hs_address;
-wire [7:0]hs_data_in;
-wire hs_write;
-wire hs_access;
+wire [15:0]hs_address;
+wire [7:0] hs_data_in;
+wire [7:0] hs_data_out;
+wire hs_write_enable;
+wire hs_access_read;
+wire hs_access_write;
+wire hs_pause;
+wire hs_configured;
 
 hiscore #(
-	.HS_ADDRESSWIDTH(12),
-	.CFG_ADDRESSWIDTH(2),
+	.HS_ADDRESSWIDTH(16),
+	.CFG_ADDRESSWIDTH(3),
 	.CFG_LENGTHWIDTH(2)
 ) hi (
-	.clk(clk_sys),
-	.reset(reset),
-	.delay(1'b0),
-	.ioctl_upload(ioctl_upload),
-	.ioctl_download(ioctl_download),
-	.ioctl_wr(ioctl_wr),
-	.ioctl_addr(ioctl_addr),
-	.ioctl_dout(ioctl_dout),
-	.ioctl_din(ioctl_din),
-	.ioctl_index(ioctl_index),
+	.*,
+	.clk(CLK_49M),
+	.paused(pause_cpu),
+	.autosave(status[27]),
 	.ram_address(hs_address),
+	.data_from_ram(hs_data_out),
 	.data_to_ram(hs_data_in),
-	.ram_write(hs_write),
-	.ram_access(hs_access)
+	.data_from_hps(ioctl_dout),
+	.data_to_hps(ioctl_din),
+	.ram_write(hs_write_enable),
+	.ram_intent_read(hs_access_read),
+	.ram_intent_write(hs_access_write),
+	.pause_cpu(hs_pause),
+	.configured(hs_configured)
 );
 
 endmodule
