@@ -90,7 +90,7 @@ assign cs_sounddata = (~n_cs_k501 & z80_A[14]) & (z80_A[13:12] == 2'b00) & (z80_
 //Generate sound IRQ trigger
 reg sound_irq = 1;
 always_ff @(posedge clk_49m) begin
-	if(n_cen_3m) begin
+	if(cen_3m) begin
 		if(cs_soundirq)
 			sound_irq <= 1;
 		else
@@ -102,17 +102,13 @@ assign irq_trigger = sound_irq;
 //------------------------------------------------------- Clock division -------------------------------------------------------//
 
 //Generate 12.288MHz, 6.144MHz and 3.072MHz clock enables
-reg [2:0] div = 3'd0;
+reg [3:0] div = 4'd0;
 always_ff @(posedge clk_49m) begin
-	div <= div + 3'd1;
-end
-reg [3:0] n_div = 4'd0;
-always_ff @(negedge clk_49m) begin
-	n_div <= n_div + 4'd1;
+	div <= div + 4'd1;
 end
 wire cen_12m = !div[1:0];
-wire cen_6m = !div;
-wire n_cen_3m = !n_div;
+wire cen_6m = !div[2:0];
+wire cen_3m = !div;
 
 //------------------------------------------------------------ CPUs ------------------------------------------------------------//
 
@@ -124,7 +120,7 @@ T80s E3
 (
 	.RESET_n(reset),
 	.CLK(clk_49m),
-	.CEN(n_cen_3m & ~pause),
+	.CEN(cen_3m & ~pause),
 	.NMI_n(n_nmi),
 	.WAIT_n(n_wait),
 	.MREQ_n(n_mreq),
@@ -272,7 +268,7 @@ always_ff @(posedge clk_49m) begin
 		flip <= 0;
 		cs_soundirq <= 0;
 	end
-	else if(n_cen_3m) begin
+	else if(cen_3m) begin
 		if(cs_mainlatch)
 			case(z80_A[3:1])
 				3'b000: nmi_mask <= k501_D[0];

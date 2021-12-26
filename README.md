@@ -17,6 +17,7 @@ An FPGA implementation of Time Pilot for the MiSTer platform
 - T80s CPU by Daniel Wallner with fixes by MikeJ, Sorgelig, and others
 - JT49 sound core by Jotego with modifications to the volume scale by Ace
 - Fully-tuned switchable low-pass filters
+- Option for normalized video timings to use with picky HDTVs and monitors (underclocks the game by ~1%)
 
 ## Installation
 Place `*.rbf` into the "_Arcade/cores" folder on your SD card.  Then, place `*.mra` into the "_Arcade" folder and ROM files from MAME into "games/mame".
@@ -48,11 +49,3 @@ Quick reference for folders and file placement:
 
 ## Known Issues
 1) The volume scale for the AY-3-8910s requires further tuning for proper accuracy
-
-## High Score Save/Load
-Save and load of high scores is supported for this core.
-
-- To save your high scores manually, press the 'Save Settings' option in the OSD.  High scores will be automatically loaded when the core is started.
-- To enable automatic saving of high scores, turn on the 'Autosave Hiscores' option, press the 'Save Settings' option in the OSD, and reload the core.  High scores will then be automatically saved (if they have changed) any time the OSD is opened.
-
-High score data is stored in /media/fat/config/nvram/ as ```<mra filename>.nvm``
