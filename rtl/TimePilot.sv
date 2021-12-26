@@ -49,6 +49,10 @@ module TimePilot
 	input                ioctl_wr,
 	
 	input                pause,
+	
+	//This input serves to select different fractional dividers to acheive 1.789772MHz for the sound Z80 and AY-3-8910s
+	//depending on whether Time Pilot runs with original or underclocked timings to normalize sync frequencies
+	input                underclock,
 
 	input         [15:0] hs_address,
 	input          [7:0] hs_data_in,
@@ -153,6 +157,8 @@ TimePilot_SND sound_pcb
 	.cpubrd_Din(cpubrd_D),	
 	.controls_dip(controls_dip),
 	.sound(sound),
+	
+	.underclock(underclock),
 	
 	.ep7_cs_i(ep7_cs_i),
 	.ioctl_addr(ioctl_addr),

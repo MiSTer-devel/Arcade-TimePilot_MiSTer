@@ -42,6 +42,10 @@ module TimePilot_SND
 	output         [7:0] controls_dip,
 	output signed [15:0] sound,
 	
+	//This input serves to select different fractional dividers to acheive 1.789772MHz for the sound Z80 and AY-3-8910s
+	//depending on whether Time Pilot runs with original or underclocked timings to normalize sync frequencies
+	input                underclock,
+	
 	input                ep7_cs_i,
 	input         [24:0] ioctl_addr,
 	input          [7:0] ioctl_data,
@@ -65,21 +69,19 @@ reg [8:0] div = 9'd0;
 always_ff @(posedge clk_49m) begin
 	div <= div + 9'd1;
 end
-reg [3:0] n_div = 4'd0;
-always_ff @(negedge clk_49m) begin
-	n_div <= n_div + 4'd1;
-end
-wire n_cen_3m = !n_div;
+wire cen_3m = !div[3:0];
 wire cen_dcrm = !div;
 
 //Generate 1.789772MHz clock enable for Z80 and AY-3-8910s, clock enable for AY-3-8910 timer
 //(uses Jotego's fractional clock divider from JTFRAME)
+wire [9:0] sound_cen_n = underclock ? 10'd31 : 10'd30;
+wire [9:0] sound_cen_m = underclock ? 10'd843 : 10'd824;
 wire cen_1m79, cen_timer;
 jtframe_frac_cen #(10) sound_cen
 (
 	.clk(clk_49m),
-	.n(10'd30),
-	.m(10'd824),
+	.n(sound_cen_n),
+	.m(sound_cen_m),
 	.cen({cen_timer, 8'bZZZZZZZZ, cen_1m79})
 );
 
@@ -162,7 +164,7 @@ reg n_irq = 1;
 always_ff @(posedge clk_49m or posedge irq_clr) begin
 	if(irq_clr)
 		n_irq <= 1;
-	else if(n_cen_3m && irq_trigger)
+	else if(cen_3m && irq_trigger)
 		n_irq <= 0;
 end
 
@@ -214,7 +216,7 @@ reg [7:0] sound_D = 8'd0;
 always_ff @(posedge clk_49m) begin
 	if(!reset)
 		sound_D <= 8'd0;
-	else if(n_cen_3m && cs_sounddata)
+	else if(cen_3m && cs_sounddata)
 		sound_D <= cpubrd_Din;
 end
 
