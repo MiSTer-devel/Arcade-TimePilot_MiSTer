@@ -6,7 +6,7 @@
 //  Time Pilot for MiSTer
 //  Original design Copyright (C) 2017 Dar
 //  Initial port to MiSTer Copyright (C) 2017 Sorgelig
-//  Updated port to MiSTer Copyright (C) 2021 Ace,
+//  Updated port to MiSTer Copyright (C) 2021, 2022 Ace,
 //  Ash Evans (aka ElectronAsh/OzOnE), Artemio Urbina and Kitrinx (aka Rysha)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a
@@ -39,7 +39,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [45:0] HPS_BUS,
+	inout  [48:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -237,10 +237,10 @@ localparam CONF_STR = {
 	"V,v",`BUILD_DATE
 };
 
-wire        forced_scandoubler;
-wire  [1:0] buttons;
-wire [31:0] status;
-wire [10:0] ps2_key;
+wire         forced_scandoubler;
+wire   [1:0] buttons;
+wire [127:0] status;
+wire  [10:0] ps2_key;
 
 wire        ioctl_download;
 wire        ioctl_upload;
@@ -347,7 +347,7 @@ always @(posedge CLK_50M) begin
 			end
 			5: begin
 				cfg_address <= 7;
-				cfg_data <= underclock_r ? 3268298314 : 3639383488;
+				cfg_data <= underclock_r ? 3262113561 : 3639383488;
 				cfg_write <= 1;
 			end
 			7: begin
@@ -467,10 +467,11 @@ wire ce_pix;
 
 wire rotate_ccw = 0;
 wire no_rotate = status[12] | direct_video;
-wire flip = ~no_rotate;
+wire flip = video_rotated;
+wire video_rotated;
 screen_rotate screen_rotate(.*);
 
-arcade_video #(256,24) arcade_video
+arcade_video #(256, 24) arcade_video
 (
 	.*,
 
